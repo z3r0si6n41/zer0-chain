@@ -1,0 +1,178 @@
+#!/bin/bash
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+cat << EOF
+d88888D d8888b. d8888b.  .d88b.          .o88b. db   db   j88D   db d8b   db 
+YP  d8' VP  '8D 88  '8D .8P  88.        d8P  Y8 88   88  j8~88  o88 888o  88 
+   d8'    oooY' 88oobY' 88  d'88        8P      88ooo88 j8' 88   88 88V8o 88 
+  d8'     ~~~b. 88'8b   88 d' 88 C8888D 8b      88~~~88 V88888D  88 88 V8o88 
+ d8' db db   8D 88 '88. '88  d8'        Y8b  d8 88   88     88   88 88  V888 
+d88888P Y8888P' 88   YD  'Y88P'          'Y88P' YP   YP     VP   VP VP   V8P 
+
+EOF
+
+echo
+echo -e "Version:$GREEN 0.0.1$NC"
+echo -e "By$BLUE z3r0 s!6n41$NC"
+echo -e "$RED""I'm not responsible for what you do with this software.$NC ;)"
+echo
+
+help=false
+target=''
+mode='full'
+outFile=''
+quiet=false
+verbose=false
+
+Help() {
+	echo 'Usage:'
+	echo './zero-chain -t www.example.com [-m full,nmap,tech,waf,fuzz,dns]'
+	echo './zero-chain -t 127.0.0.1 -m nmap'
+	echo
+	echo 'Options:'
+	echo '  -t      Target domain or IP address.'
+	echo '  -m      (optional) Mode in which to run. Can be full, nmap,'
+	echo '          dns, tech, waf, or any comma-separated list other'
+	echo '			than full. Defaults to full.'
+	echo '  -o      (optional) A file which to write the results of all scans.'
+	echo '  -q      (optional) Enable quiet running (no output to std).'
+	echo '	-v		(optional) Enable more output when not running in quiet mode.'
+	echo
+}
+
+while getopts hmoqvt: flag
+do
+	case "${flag}" in
+		h) help=true;;
+		t) target=${OPTARG};;
+		m)
+			if [[ ${@:$OPTIND} =~ ^[0-9a-zA-Z]+$ ]];then
+				mode=${@:$OPTIND}
+				OPTIND=$((OPTIND+1))
+			else
+				mode='full'
+			fi
+		;;
+		v) verbose=true;;
+		o)
+			#echo ${@:$OPTIND}
+			if [[ ${@:$OPTIND} =~ ^[0-9a-zA-Z.]+$ ]];then
+				outFile=${@:$OPTIND}
+				OPTIND=$((OPTIND+1))
+			else
+				outFile=''
+			fi
+		;;
+		q) quiet=true;;
+	esac
+done
+
+if $help; then
+        Help
+fi
+
+if [ -z "$target" ]; then
+	echo 'No target specified!'
+else
+	targets=$(echo $target | tr "," "\n")
+	modes=$(echo $mode | tr "," "\n")
+	for t in $targets
+	do
+		echo "Running against target:" ${t}
+		
+		proto="$(echo $t | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+		if [[ ${proto} == '' ]]; then
+			echo "You must include the protocol for the target domain"
+			exit 1
+		fi
+		t=$(echo $t | sed -e s,$proto,,g)
+		t=$(echo $t | sed 's:/*$::')
+		
+		if [ "${outFile}" != '' ]; then
+		    touch ${outFile}
+		fi
+		
+		if [ ${mode,,}=='full' ] || [ ${mode,,}=='nmap' ]; then
+			if [ ${verbose} == true ] && [ ${quiet} != true ]; then
+				nmapOut=`nmap -vvv -sC -sV ${t}`
+			else
+				nmapOut=`nmap -sC -sV ${t}`
+			fi
+
+			if [ ${quiet} != true ]; then
+				echo "$nmapOut"
+				echo
+			fi
+			if [ "${outFile}" != '' ]; then
+				echo "$nmapOut" >> $outFile
+				echo "\n\n" >> $outFile
+			fi
+		fi
+		if [ ${mode,,}=='full' ] || [ ${mode,,}=='dns' ]; then
+			if [ ${verbose} == true ] && [ ${quiet} != true ]; then
+				dnsOut=`dnsrecon -v -d ${t}`
+			else
+				dnsOut=`dnsrecon -d ${t}`
+			fi
+			
+			if [ ${quiet} != true ]; then
+				echo "$dnsOut"
+				echo
+			fi
+			if [ "${outFile}" != '' ]; then
+				echo "$dnsOut" >> $outFile
+				echo "\n\n" >> $outFile
+			fi
+		fi
+		if [ ${mode,,}=='full' ] || [ ${mode,,}=='fuzz' ]; then
+			if [ ${verbose} == true ] && [ ${quiet} != true ]; then
+				fuzzOut=`wfuzz -v --hc 404 -w /usr/share/wfuzz/wordlist/general/common.txt ${t}/FUZZ`
+			else
+				fuzzOut=`wfuzz --hc 404 -w /usr/share/wfuzz/wordlist/general/common.txt ${t}/FUZZ`
+			fi
+			
+			if [ ${quiet} != '' ]; then
+				echo "$fuzzOut"
+			fi
+			if [ "${outFile}" != '' ]; then
+				echo "$fuzzOut" >> $outFile
+				echo "\n\n" >> $outFile
+			fi
+		fi
+		if [ ${mode,,}=='full' ] || [ ${mode,,}=='waf' ]; then
+			if [ ${verbose} == true ] && [ ${quiet} != true ]; then
+				wafOut=`wafw00f -v ${proto}${t}`
+			else
+				wafOut=`wafw00f ${proto}${t}`
+			fi
+			
+			if [ ${quiet} != true ]; then
+				echo "$wafOut"
+			fi
+			if [ "${outFile}" != '' ]; then
+				echo "$wafOut" >> $outFile
+				echo "\n\n" >> $outFile
+			fi
+		fi
+		if [ ${mode,,}=='full' ] || [ ${mode,,}=='tech' ]; then
+			if [ ${verbose} == true ] && [ ${quiet} != true ]; then
+				techOut=`whatweb ${proto}${t}`
+			else
+				techOut=`whatweb ${proto}${t}`
+			fi
+			
+			if [ ${quiet} != true ]; then
+				echo "$techOut"
+			fi
+			if [ "${outFile}" != '' ]; then
+				echo "$techOut" >> $outFile
+			fi
+		fi
+		echo "\n\n"
+	done
+fi
