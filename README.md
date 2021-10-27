@@ -1,8 +1,10 @@
 # zero-chain
 Chain common enumeration tools to run sequentially
 
-__USAGE__
+__INSTALLATION__  
+chmod 777 ./zero-chain  
+chmod 777 ./install.sh  
+./install.sh  
 
-chmod 777 ./zero-chain
-
-./zero-chain [URL]
+__USAGE__  
+./zero-chain -t [URL]
